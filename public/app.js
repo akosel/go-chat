@@ -31,6 +31,7 @@ new Vue({
             if (this.newMsg !== '') {
                 this.ws.send(
                     JSON.stringify({
+                        type: 'message',
                         email: this.email,
                         username: this.username,
                         message: $('<p>').html(this.newMsg).text()
@@ -51,6 +52,14 @@ new Vue({
             this.email = $('<p>').html(this.email).text();
             this.username = $('<p>').html(this.username).text();
             this.joined = true;
+            this.ws.send(
+                JSON.stringify({
+                    type: 'connect',
+                    email: this.email,
+                    username: this.username,
+                    message: $('<p>').html(this.newMsg).text()
+                })
+            );
         },
         gravatarURL: function(email) {
             return 'http://www.gravatar.com/avatar/' + CryptoJS.MD5(email);
