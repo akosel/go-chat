@@ -47,7 +47,7 @@ new Vue({
         roomName: '',
         joined: false,
 	chatrooms: [{ text: 'main', value: 'main' }],
-	users: [],
+	users: [{ text: 'please login to chat', value: null }],
 	activeRoom: 'main'
     },
 
@@ -67,9 +67,9 @@ console.log(msg);
                 var element = document.getElementById('chatroom-messages');
                 element.scrollTop = element.scrollHeight;
 
-		self.users = msg.users.map(function(user) {
-		    return { text: user, value: user };
-		});
+                self.users = msg.users.map(function(user) {
+                    return { text: user, value: user };
+                });
 
 		self.chatrooms = msg.rooms.map(function(room) {
 		    return { text: room, value: room };
