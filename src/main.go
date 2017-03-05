@@ -12,13 +12,17 @@ var upgrader = websocket.Upgrader{}
 
 // Message chat message
 type Message struct {
-	Type     string `json:"type"`
-	Email    string `json:"email"`
-	Username string `json:"username"`
-	Message  string `json:"message"`
+	Type     string   `json:"type"`
+	Email    string   `json:"email"`
+	Username string   `json:"username"`
+	Room     string   `json:"room"`
+	Users    []string `json:"users"`
+	Rooms    []string `json:"rooms"`
+	Message  string   `json:"message"`
 }
 
 type ChatRoom struct {
+	Name       string
 	Clients    map[string]Client
 	ClientsMtx sync.Mutex
 	Queue      chan Message
@@ -27,11 +31,9 @@ type ChatRoom struct {
 func (cr *ChatRoom) Init() {
 	cr.Queue = make(chan Message, 5)
 	cr.Clients = make(map[string]Client)
-	log.Println("Init chatroom")
 
 	go func() {
 		for {
-			log.Println("Looping")
 			cr.Broadcast()
 			time.Sleep(100 * time.Millisecond)
 		}
@@ -43,12 +45,13 @@ func (cr *ChatRoom) Join(client Client) {
 
 	cr.ClientsMtx.Lock()
 	if _, exists := cr.Clients[client.Username]; exists {
-		log.Println("Client", client.Username, "already exists")
-	}
-	cr.Clients[client.Username] = client
-	msg := Message{Type: "message", Username: "Chatbot", Message: "<B>" + client.Username + "</B> has joined the chat."}
+		log.Println("Client", client.Username, "already in chatroom")
+	} else {
+		cr.Clients[client.Username] = client
+		msg := Message{Type: "message", Email: "Chatbot", Username: "Chatbot", Message: "<B>" + client.Username + "</B> has joined the chat."}
 
-	cr.AddMsg(msg)
+		cr.AddMsg(msg)
+	}
 
 }
 
@@ -56,20 +59,33 @@ func (cr *ChatRoom) Leave(username string) {
 	cr.ClientsMtx.Lock()
 	delete(cr.Clients, username)
 	cr.ClientsMtx.Unlock()
-	msg := Message{Type: "message", Username: "Chatbot", Message: "<B>" + username + "</B> has left the chat."}
+	msg := Message{Type: "message", Email: "Chatbot", Username: "Chatbot", Message: "<B>" + username + "</B> has left the chat."}
 	cr.AddMsg(msg)
 }
 
 func (cr *ChatRoom) AddMsg(msg Message) {
+	keys := make([]string, 0, len(chatrooms))
+	for k := range chatrooms {
+		keys = append(keys, k)
+	}
+	msg.Rooms = keys
+	msg.Users = cr.GetClients()
 	cr.Queue <- msg
 }
 
 func (cr *ChatRoom) Broadcast() {
 	m := <-cr.Queue
-	log.Println("Checking", m)
 	for _, client := range cr.Clients {
 		client.Send(m)
 	}
+}
+
+func (cr *ChatRoom) GetClients() []string {
+	keys := make([]string, 0, len(cr.Clients))
+	for k := range cr.Clients {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 type Client struct {
@@ -100,7 +116,7 @@ func (cl *Client) Send(msg Message) {
 	}
 }
 
-var chat ChatRoom
+var chatrooms = make(map[string]ChatRoom)
 
 func main() {
 	fs := http.FileServer(http.Dir("../public"))
@@ -108,13 +124,20 @@ func main() {
 
 	http.HandleFunc("/ws", handleConnections)
 
+	chat := ChatRoom{Name: "main"}
 	chat.Init()
+	chatrooms["main"] = chat
 
 	log.Println("http server started on :8000")
 	err := http.ListenAndServe(":8000", nil)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
+}
+
+func getInitMessage() Message {
+	msg := Message{Type: "message", Email: "Chatbot", Username: "Chatbot"}
+	return msg
 }
 
 func handleConnections(w http.ResponseWriter, r *http.Request) {
@@ -126,20 +149,35 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 	defer ws.Close()
 
-	client := Client{Conn: ws, BelongsTo: &chat}
+	var chat ChatRoom
+	if _, exists := chatrooms["main"]; !exists {
+		chat := ChatRoom{Name: "main"}
+		chat.Init()
+		chatrooms["main"] = chat
+	}
+	chat = chatrooms["main"]
 
-	log.Println("Connection")
+	client := Client{Conn: ws, BelongsTo: &chat}
 	for {
 		var msg Message
 
 		err := ws.ReadJSON(&msg)
-		if msg.Type == "connect" {
-			log.Println(msg)
-			client.Init(msg.Username, msg.Email)
+		log.Println(msg)
+		if msg.Type == "join" {
+			if client.BelongsTo.Name != msg.Room {
+				client.Exit()
+			}
+			chat := chatrooms[msg.Room]
+			client.BelongsTo = &chat
 			chat.Join(client)
-			log.Println("Client connected", client)
 		} else if msg.Type == "message" {
 			client.NewMsg(msg)
+		} else if msg.Type == "createUser" {
+			client.Init(msg.Username, msg.Email)
+		} else if msg.Type == "createRoom" {
+			chat := ChatRoom{Name: msg.Room}
+			chat.Init()
+			chatrooms[msg.Room] = chat
 		}
 		if err != nil {
 			log.Printf("error: %v", err)

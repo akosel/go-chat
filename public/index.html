@@ -21,9 +21,34 @@
 </header>
 <main id="app">
     <div class="row">
-        <div class="col s12">
+        <div class="input-field col s4">
+	    <material-select v-model="activeRoom" v-on:input="changeRoom">
+	      <option v-for="room in chatrooms" v-bind:value="room.value">
+	        {{ room.text }}
+	      </option>
+	    </material-select>
+        </div>
+        <div class="input-field col s4" v-if="joined">
+            <input type="text" v-model.trim="roomName" @keyup.enter="createRoom">
+        </div>
+        <div class="input-field col s4" v-if="joined">
+            <button class="waves-effect waves-light btn" @click="createRoom">
+                <i class="material-icons right">create</i>
+                Create Room
+            </button>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col s4">
+	    <ul id="chatroom-users">
+		<li v-for="user in users" v-bind:value="user.value">
+		    {{ user.text }}
+		</li>
+	    </li>
+        </div>
+        <div class="col s8">
             <div class="card horizontal">
-                <div id="chat-messages" class="card-content" v-html="chatContent">
+                <div id="chatroom-messages" class="card-content" v-html="chatContent">
                 </div>
             </div>
         </div>
@@ -47,7 +72,7 @@
             <input type="text" v-model.trim="username" placeholder="Username">
         </div>
         <div class="input-field col s4">
-            <button class="waves-effect waves-light btn" @click="join()">
+            <button class="waves-effect waves-light btn" @click="createUser()">
                 <i class="material-icons right">done</i>
                 Join
             </button>
